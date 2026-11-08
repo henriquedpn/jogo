@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PEO Auditoria</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/gridstack@10.1.1/dist/gridstack.min.css" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gridstack@10.1.1/dist/gridstack-all.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+body{
+    background:#f4f4f4;
+}
+
+.field-card{
+    background:#fff;
+    border:1px solid #ddd;
+    border-radius:8px;
+    padding:12px;
+}
+
+#recordArea{
+    min-height:400px;
+}
+
+.grid-stack-item-content{
+    background:transparent;
+    border:none;
+    box-shadow:none;
+    padding:0;
+}
+
+.field-card textarea{
+    width:100%;
+    height:100%;
+    min-height:120px;
+    resize:none;
+}
+
+.codes-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+    gap:8px;
+}
+
+.code-item{
+    background:#fff;
+    border:1px solid #dee2e6;
+    border-radius:8px;
+    padding:10px;
+    text-align:center;
+    cursor:pointer;
+}
+
+.code-item:hover{
+    background:#a5cef8;
+}
+
+#progressModal,
+#errorModal{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,.5);
+    display:none;
+    z-index:99999;
+}
+
+.popup-box{
+    background:white;
+    width:600px;
+    max-width:95%;
+    margin:100px auto;
+    padding:20px;
+    border-radius:10px;
+}
+</style>
+
+</head>
+<body>
+
+<div class="container-fluid mt-3">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+
+        <h3>PEO Auditoria</h3>
+
+        <div>
+
+            <input
+                type="file"
+                id="excelFile"
+                accept=".xlsx,.xls"
+                hidden>
+
+            <button
+                class="btn btn-primary"
+                onclick="excelFile.click()">
+                Importar Excel
+            </button>
+
+            <button
+                class="btn btn-secondary"
+                onclick="toggleLanguage()">
+                PT / EN
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="alert alert-info">
+        Os dados são armazenados em LocalStorage.
+    </div>
+
+    <div
+        id="recordArea"
+        class="grid-stack">
+    </div>
+
+</div>
+
+<div id="progressModal">
+    <div class="popup-box">
+        <h5>Convertendo Excel</h5>
+
+        <div class="progress mt-3">
+            <div
+                id="progressBar"
+                class="progress-bar progress-bar-striped progress-bar-animated"
+                style="width:0%">
+                0%
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="errorModal">
+    <div class="popup-box">
+
+        <h4 class="text-danger">
+            Erro
+        </h4>
+
+        <pre
+            id="errorText"
+            style="max-height:400px;overflow:auto;"></pre>
+
+        <button
+            class="btn btn-danger"
+            onclick="closeError()">
+            Fechar
+        </button>
+
+    </div>
+</div>
+
+<script>
+
+let DB = [];
+let CURRENT = 0;
+let LANG = "pt";
+let LAYOUT = [];
+let GRID = null;
+
+const DB_KEY = "peo_db";
+const LAYOUT_KEY = "peo_layout";
+
+const T = {
+    pt: {
+        agenda_base: "Agenda Base",
+        agenda_sonda: "Agenda Sonda",
+        codigo: "Código do Requisito",
+        requisito: "Requisito",
+        requisitominimo: "Requisito Mínimo",
+        orientacoes: "Orientações",
+        autoavaliacao: "Autoavaliação",
+        auditado: "Auditado",
+        apoio: "Apoio"
+    },
+    en: {
+        agenda_base: "Base Schedule",
+        agenda_sonda: "Rig Schedule",
+        codigo: "Requirement Code",
+        requisito: "Requirement",
+        requisitominimo: "Minimum Requirement",
+        orientacoes: "Guidelines",
+        autoavaliacao: "Self Assessment",
+        auditado: "Auditee",
+        apoio: "Support"
+    }
+};
+
+function saveDB() {
+    localStorage.setItem(
+        DB_KEY,
+        JSON.stringify(DB)
+    );
+}
+
+function loadDB() {
+    DB =
+        JSON.parse(
+            localStorage.getItem(DB_KEY)
+        ) || [];
+}
+
+function loadLayout() {
+    LAYOUT =
+        JSON.parse(
+            localStorage.getItem(LAYOUT_KEY)
+        ) || [];
+}
+
+function saveLayout() {
+
+    if (!GRID) {
+        return;
+    }
+
+    const layout = [];
+
+    GRID.engine.nodes.forEach(node => {
+
+        layout.push({
+            field: node.el.dataset.field,
+            x: node.x,
+            y: node.y,
+            w: node.w,
+            h: node.h
+        });
+
+    });
+
+    LAYOUT = layout;
+
+    localStorage.setItem(
+        LAYOUT_KEY,
+        JSON.stringify(layout)
+    );
+}
+
+function getFieldLayout(field) {
+
+    const item = LAYOUT.find(
+        x => x.field === field
+    );
+
+    return item || {
+        x: 0,
+        y: 0,
+        w: 6,
+        h: 3
+    };
+}
+
+function showError(text) {
+
+    errorText.textContent = text;
+    errorModal.style.display = "block";
+}
+
+function closeError() {
+
+    errorModal.style.display = "none";
+}
+
+function toggleLanguage() {
+
+    LANG =
+        LANG === "pt"
+        ? "en"
+        : "pt";
+
+    renderRecord();
+}
+
+function renderCodes() {
+
+    const table =
+        document.getElementById(
+            "codesTable"
+        );
+
+    if (!table) {
+        return;
+    }
+
+    table.innerHTML =
+        DB.map((r, i) => `
+            <div
+                class="code-item"
+                onclick="gotoRecord(${i})">
+                ${r.codigo || ("Registro " + (i + 1))}
+            </div>
+        `).join("");
+}
+
+function gotoRecord(i) {
+
+    CURRENT = i;
+
+    renderRecord();
+}
+
+function renderRecord() {
+
+    const area =
+        document.getElementById(
+            "recordArea"
+        );
+
+    if (!DB.length) {
+
+        area.innerHTML =
+            "<div class='alert alert-warning'>Nenhum registro carregado.</div>";
+
+        return;
+    }
+
+    const record =
+        DB[CURRENT];
+
+    area.innerHTML = "";
+
+    if (GRID) {
+        GRID.destroy(false);
+    }
+
+    GRID =
+        GridStack.init({
+            column:12,
+            float:true,
+            cellHeight:90,
+            margin:8
+        });
+
+    const codes = document.createElement(
+        "div"
+    );
+
+    codes.className =
+        "grid-stack-item";
+
+    codes.dataset.field =
+        "codigos_requisito";
+
+    codes.innerHTML = `
+    <div class="grid-stack-item-content">
+        <div class="field-card">
+            <strong>Códigos do Requisito</strong>
+            <div id="codesTable" class="codes-grid mt-2"></div>
+        </div>
+    </div>
+    `;
+
+    area.appendChild(codes);
+
+    GRID.makeWidget(
+        codes,
+        getFieldLayout(
+            "codigos_requisito"
+        )
+    );
+
+    Object.keys(record).forEach(field => {
+
+        const cfg =
+            getFieldLayout(field);
+
+        const wrapper =
+            document.createElement(
+                "div"
+            );
+
+        wrapper.className =
+            "grid-stack-item";
+
+        wrapper.dataset.field =
+            field;
+
+        wrapper.innerHTML = `
+        <div class="grid-stack-item-content">
+            <div class="field-card">
+
+                <div class="d-flex justify-content-between">
+                    <strong>
+                        ${T[LANG][field] || field}
+                    </strong>
+
+                    <i
+                        class="fa fa-pencil"
+                        id="icon_${field}"
+                        onclick="toggleEdit('${field}')">
+                    </i>
+                </div>
+
+                <textarea
+                    id="${field}"
+                    readonly>${record[field] || ""}</textarea>
+
+            </div>
+        </div>
+        `;
+
+        area.appendChild(wrapper);
+
+        GRID.makeWidget(
+            wrapper,
+            cfg
+        );
+    });
+
+    GRID.on(
+        "dragstop",
+        saveLayout
+    );
+
+    GRID.on(
+        "resizestop",
+        saveLayout
+    );
+
+    renderCodes();
+}
+
+async function toggleEdit(field) {
+
+    const textarea =
+        document.getElementById(
+            field
+        );
+
+    const icon =
+        document.getElementById(
+            "icon_" + field
+        );
+
+    if (textarea.readOnly) {
+
+        textarea.readOnly = false;
+
+        textarea.focus();
+
+        icon.className =
+            "fa fa-save";
+
+        return;
+    }
+
+    DB[CURRENT][field] =
+        textarea.value;
+
+    saveDB();
+
+    textarea.readOnly = true;
+
+    icon.className =
+        "fa fa-pencil";
+}
+
+async function uploadExcel() {
+
+    try {
+
+        progressModal.style.display =
+            "block";
+
+        const file =
+            excelFile.files[0];
+
+        if (!file) {
+            throw new Error(
+                "Selecione um arquivo."
+            );
+        }
+
+        const data =
+            await file.arrayBuffer();
+
+        const workbook =
+            XLSX.read(data);
+
+        const sheet =
+            workbook.Sheets[
+                "3. Ativos"
+            ];
+
+        const rows =
+            XLSX.utils.sheet_to_json(
+                sheet,
+                {
+                    header:1,
+                    defval:""
+                }
+            );
+
+        const headers =
+            rows[2];
+
+        const records = [];
+
+        for (
+            let i = 4;
+            i < rows.length;
+            i++
+        ) {
+
+            const row = rows[i];
+
+            const record = {};
+
+            headers.forEach(
+                (h, idx) => {
+                    record[h] =
+                        row[idx] || "";
+                }
+            );
+
+            const codigo =
+                String(
+                    record["Código do Requisito"] || ""
+                ).trim();
+
+            const requisito =
+                String(
+                    record["Requisito"] || ""
+                ).trim();
+
+            if (
+                !codigo &&
+                !requisito
+            ) {
+                continue;
+            }
+
+            records.push({
+                agenda_base:
+                    record["Agenda Base"] || "",
+                agenda_sonda:
+                    record["Agenda Sonda"] || "",
+                codigo,
+                requisito,
+                requisitominimo:
+                    record["Requisito Mínimo"] || "",
+                orientacoes:
+                    record["Orientações"] || "",
+                autoavaliacao:
+                    record["Auto-avaliação (preenchida pela auditada)\nIncluir justificativas e referências documentais"] || "",
+                auditado:
+                    record["Auditado"] || "",
+                apoio:
+                    record["Apoio"] || ""
+            });
+
+        }
+
+        DB = records;
+
+        saveDB();
+
+        CURRENT = 0;
+
+        renderRecord();
+
+        progressModal.style.display =
+            "none";
+
+    }
+    catch (e) {
+
+        progressModal.style.display =
+            "none";
+
+        showError(
+            e.stack || e
+        );
+    }
+}
+
+document
+.getElementById("excelFile")
+.addEventListener(
+    "change",
+    uploadExcel
+);
+
+window.onload = () => {
+
+    loadDB();
+
+    loadLayout();
+
+    renderRecord();
+};
+
+</script>
+
+</body>
+</html>
