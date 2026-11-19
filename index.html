@@ -58,7 +58,14 @@ canvas{display:block;position:fixed;inset:0}
 .cBtn.small{flex:0 0 auto;padding:10px 12px;display:none}.cBtn:active{background:#25324a}
 #sel.isCustom .cBtn.small{display:block}
 #cStatus{font-size:12px;color:#ffc93c;text-align:center;min-height:0;margin:-2px 0 8px}#cStatus:empty{display:none}
-body.selecting #touch,body.selecting #spd,body.selecting #topBtns{display:none!important}
+#zoomBar{position:fixed;right:calc(12px + env(safe-area-inset-right));top:50%;transform:translateY(-50%);z-index:4;width:46px;padding:8px 0;border-radius:23px;background:rgba(10,15,25,.72);border:1px solid #2b3a52;display:flex;flex-direction:column;align-items:center;gap:6px;touch-action:none;user-select:none}
+.zIco{font-size:17px;line-height:1}
+.zTrack{position:relative;width:10px;height:200px;border-radius:5px;background:#26324a;cursor:pointer}
+.zTrack:before{content:'';position:absolute;inset:-12px -18px}
+.zFill{position:absolute;left:0;right:0;bottom:0;border-radius:5px;background:#ff8a00}
+.zThumb{position:absolute;left:50%;width:30px;height:30px;margin-left:-15px;margin-top:-15px;border-radius:50%;background:#fff;border:3px solid #ff8a00;box-shadow:0 2px 8px rgba(0,0,0,.5);box-sizing:border-box}
+@media (max-width:519px){#zoomBar{top:calc(290px + env(safe-area-inset-top));transform:none}.zTrack{height:170px}}
+body.selecting #touch,body.selecting #spd,body.selecting #topBtns,body.selecting #zoomBar{display:none!important}
 kbd{background:#25324a;border-radius:4px;padding:1px 6px;font-size:12px}
 .pre{background:#0c1320;border:1px solid #2b3a52;border-radius:12px;padding:10px 12px;margin:0 0 12px}
 .preLbl{font-size:12px;font-weight:800;letter-spacing:.4px;color:#ffb766;margin-bottom:6px}
@@ -96,6 +103,7 @@ kbd{background:#25324a;border-radius:4px;padding:1px 6px;font-size:12px}
   </div>
 </div>
 
+<div id="zoomBar" aria-label="Zoom da câmera"><div class="zIco">🗺️</div><div class="zTrack" id="zTrack"><div class="zFill" id="zFill"></div><div class="zThumb" id="zThumb"></div></div><div class="zIco">🚗</div></div>
 <div id="topBtns"><div class="rbtn" id="pauseBtn" aria-label="Pausar o jogo">❚❚</div><div class="rbtn" id="sndBtn" aria-label="Som liga/desliga">🔊</div></div>
 
 <div id="spd"><label>VEL. MÁXIMA <b id="spdPct">100%</b> <span id="spdKmh"></span></label>
@@ -273,15 +281,15 @@ for(let i=0;i<N;i++){minX=Math.min(minX,T.x[i]);maxX=Math.max(maxX,T.x[i]);minY=
   lake.rotation.x=-Math.PI/2;lake.scale.set(32*SCALE,17*SCALE,1);lake.position.set(10*SCALE,0.1,730*SCALE);scene.add(lake);
   // área de escape, zebras, faixa do box e asfalto
   const rightOuter=i=>{const o=pitOuter(mod(i,N));return o===null?HW+28:Math.max(HW+28,o+10);};
-  ribbon(0,N,-(HW+40),i=>rightOuter(i)+12,0.05,mat({color:0xcdbb8a}),1,100);
-  ribbon(0,N,-(HW+10),-HW,0.2,mat({map:texKerb}),1,48);
-  ribbon(0,N,HW,HW+10,0.2,mat({map:texKerb}),1,48);
-  ribbon(PIT.rampA,PIT.rampB,HW-3,i=>pitOuter(i),0.35,mat({map:texAsphalt,color:0xcfd3d8}),1,128);
-  ribbon(0,N,-HW,HW,0.5,mat({map:texAsphalt}),2*HW/128,128);
+  ribbon(0,N,-(HW+40),i=>rightOuter(i)+12,0.05,mat({color:0xcdbb8a,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:2}),1,100);
+  ribbon(0,N,-(HW+10),-HW,0.2,mat({map:texKerb,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}),1,48);
+  ribbon(0,N,HW,HW+10,0.2,mat({map:texKerb,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}),1,48);
+  ribbon(PIT.rampA,PIT.rampB,HW-3,i=>pitOuter(i),0.35,mat({map:texAsphalt,color:0xcfd3d8,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}),1,128);
+  ribbon(0,N,-HW,HW,0.5,mat({map:texAsphalt,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}),2*HW/128,128);
   // linha de largada
-  ribbon(-1,1,-HW,HW,0.6,mat({map:texChecker}),1,16);
+  ribbon(-1,1,-HW,HW,0.6,mat({map:texChecker,polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-6}),1,16);
   // marcas do grid
-  const gridMat=mat({color:0xffffff});
+  const gridMat=mat({color:0xffffff,polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-6});
   for(const [gs,gl] of GRID){const gi=idxOf(mod(gs,L))+3;ribbon(gi,gi+1,LANES[gl]-16,LANES[gl]+16,0.6,gridMat,1,16);}
   // barreiras de proteção (vermelho e branco)
   const wallMat=mat({map:texWall});
@@ -892,6 +900,19 @@ const fmt=t=>{const m=Math.floor(t/60),s=t-m*60;return m+':'+(s<10?'0':'')+s.toF
 
 /* ===================== CÂMERA E HUD ===================== */
 let camInit=false,camHead=0;
+const camZoom={val:0,cur:0};
+try{const v=+localStorage.getItem('interlagos_zoom');if(v>=0&&v<=1)camZoom.val=camZoom.cur=v;}catch(_){}
+(()=>{const tr=document.getElementById('zTrack'),th=document.getElementById('zThumb'),fl=document.getElementById('zFill');let id=null;
+  const draw=()=>{th.style.top=((1-camZoom.val)*100)+'%';fl.style.height=(camZoom.val*100)+'%';};
+  const set=e=>{const r=tr.getBoundingClientRect();camZoom.val=Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height));if(camZoom.val<0.03)camZoom.val=0;draw();
+    try{localStorage.setItem('interlagos_zoom',camZoom.val.toFixed(2));}catch(_){}};
+  const bar=document.getElementById('zoomBar');
+  bar.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();id=e.pointerId;try{bar.setPointerCapture(id)}catch(_){}set(e);});
+  bar.addEventListener('pointermove',e=>{if(e.pointerId===id)set(e);});
+  for(const ev of ['pointerup','pointercancel'])bar.addEventListener(ev,e=>{if(e.pointerId===id)id=null;});
+  addEventListener('keydown',e=>{if(e.key==='z'||e.key==='Z'){camZoom.val=Math.min(1,camZoom.val+0.1);draw();}if(e.key==='x'||e.key==='X'){camZoom.val=Math.max(0,camZoom.val-0.1);draw();}});
+  draw();})();
+
 const camOrbit={yaw:0,pitch:0,drag:false,back:false};
 (()=>{let id=null,lx=0,ly=0,lastTap=0,moved=0;
   const live=()=>state==='race'||state==='lights'||state==='done';
@@ -915,9 +936,25 @@ function updateCamera(dt){
   const tx=p.x-ox*dist,tz=p.y-oz*dist;
   if(!camInit){camPos.set(tx,hgt,tz);camInit=true;}
   const k=camOrbit.drag?1:1-Math.exp(-dt*8);camPos.x+=(tx-camPos.x)*k;camPos.z+=(tz-camPos.z)*k;camPos.y+=(hgt-camPos.y)*k;
-  camera.position.copy(camPos);
+  // zoom: afasta a câmera do carro até mostrar a pista inteira de cima
+  camZoom.cur+=(camZoom.val-camZoom.cur)*Math.min(1,dt*6);
+  const z=camZoom.cur,z1=Math.min(1,z/0.6),t=Math.max(0,Math.min(1,(z-0.6)/0.4)),tt=t*t*(3-2*t);
+  const zm=1+7*z1*z1;                                  // multiplicador da distância
+  const zp=new THREE.Vector3(p.x+(camPos.x-p.x)*zm,camPos.y*(1+13*z1*z1),p.y+(camPos.z-p.y)*zm);
   const la=W<H?230:150;
-  look.set(p.x+fx*la*(1-orb),10+4*orb,p.y+fz*la*(1-orb));camera.lookAt(look);
+  look.set(p.x+fx*la*(1-orb)*(1-z1),10+4*orb,p.y+fz*la*(1-orb)*(1-z1));
+  if(tt>0){ // visão da pista inteira, vista de cima
+    const vf=camera.fov*Math.PI/360,hf=Math.atan(Math.tan(vf)*camera.aspect);
+    const hFull=Math.max(((maxY-minY)/2+300)/Math.tan(vf),((maxX-minX)/2+300)/Math.tan(hf));
+    const cx=(minX+maxX)/2,cz=(minY+maxY)/2;
+    zp.lerp(new THREE.Vector3(cx,hFull,cz+hFull*0.18),tt);look.lerp(new THREE.Vector3(cx,0,cz),tt);
+  }
+  camera.position.copy(zp);camera.lookAt(look);
+  const reach=Math.max(0,zp.distanceTo(look)-200);
+  scene.fog.near=1800+reach*1.2;scene.fog.far=6500+reach*2.2;
+  const nearV=Math.max(3,reach*0.04);
+  if(Math.abs(camera.far-(12000+reach*3))>500||Math.abs(camera.near-nearV)>Math.max(1,nearV*0.1)){camera.far=12000+reach*3;camera.near=nearV;camera.updateProjectionMatrix();}
+
   const fov=(W<H?78:62)+Math.min(12,p.v*0.011);if(Math.abs(camera.fov-fov)>0.05){camera.fov+=(fov-camera.fov)*0.1;camera.updateProjectionMatrix();}
 }
 const miniPath=new Path2D();for(let i=0;i<N;i++)i?miniPath.lineTo(T.x[i],T.y[i]):miniPath.moveTo(T.x[i],T.y[i]);miniPath.closePath();
@@ -1427,7 +1464,7 @@ function showMenu(){
    <li><b>Bater na lateral</b> da pista faz perder <b>50%</b> da velocidade.</li>
    <li><b>ACELERAR</b> (modo manual) – segure para acelerar; ao soltar, o carro para de acelerar e vai perdendo velocidade (<kbd>↑</kbd>, <kbd>W</kbd> ou <kbd>Espaço</kbd>).</li>
    <li><b>MANUAL / PILOTO AUTO</b> – no piloto automático o carro acelera e freia sozinho antes das curvas, e os botões ACELERAR e FREIO ficam desabilitados; você só vira e chama o box (tecla <kbd>C</kbd>).</li>
-   <li><b>Câmera:</b> arraste o dedo na tela para girar a câmera 360° em volta do carro. Toque duas vezes para voltar para trás do carro.</li>
+   <li><b>Câmera:</b> arraste o dedo na tela para girar a câmera 360° em volta do carro. Toque duas vezes para voltar para trás do carro. A <b>barra de zoom</b> na lateral direita afasta a câmera até mostrar a pista inteira (teclas <kbd>Z</kbd> e <kbd>X</kbd>).</li>
    <li><b>Vácuo:</b> chegue logo atrás de outro carro para ganhar velocidade e depois vire para o lado para passar.</li>
    <li><b>Pneus:</b> gastam cerca de 30% por volta. Em 0% o carro perde 60% da velocidade.</li>
    <li><b>BOX</b> – confirme a parada (tecla <kbd>B</kbd>). Você entra no box na próxima passagem pela reta dos boxes e troca os pneus.</li>
@@ -1460,7 +1497,7 @@ function renderResults(){
 }
 
 reset();showMenu();requestAnimationFrame(frame);
-window.__game={tilt,onOrient,steerIn,readInput,setAuto,get autoMode(){return autoMode},camOrbit,setGas,toggleGas,camera,custom,addCustomFromBuffer,show,openSelect,pickCar,get selCar(){return selCar},CAR_TYPES,get paused(){return paused},togglePause,Snd,audioUpdate,pitStopSound,camera,carMeshes,renderer,scene,get cars(){return cars},get state(){return state},T,PIT,keys,changeLane,toggleBox,startRace,simStep,LANES,get raceTime(){return raceTime}};
+window.__game={camZoom,tilt,onOrient,steerIn,readInput,setAuto,get autoMode(){return autoMode},camOrbit,setGas,toggleGas,camera,custom,addCustomFromBuffer,show,openSelect,pickCar,get selCar(){return selCar},CAR_TYPES,get paused(){return paused},togglePause,Snd,audioUpdate,pitStopSound,camera,carMeshes,renderer,scene,get cars(){return cars},get state(){return state},T,PIT,keys,changeLane,toggleBox,startRace,simStep,LANES,get raceTime(){return raceTime}};
 })();
 </script>
 </body>
